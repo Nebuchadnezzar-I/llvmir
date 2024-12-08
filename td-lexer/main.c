@@ -12,23 +12,52 @@ typedef enum {
     ILLG,
 } State;
 
-const int dfa[6][7] = {
-    {  1,  -1,  -1,  -1,  -1,   0,  -1 },
-    { -1,   2,  -1,  -1,  -1,   1,  -1 },
-    { -1,  -1,   3,  -1,  -1,   2,  -1 },
-    { -1,  -1,  -1,   4,  -1,   3,  -1 },
-    { -1,  -1,  -1,   4,   5,   4,  -1 },
-    { -1,  -1,  -1,  -1,  -1,   5,  -1 },
+const char *tokenNames[] = {
+    "TYPE", "IDNT", "ASSG", "NUMB", "SEMI", "SPCE", "ILLG"
 };
 
-int getClass(const char *cursor) {
-    if (strncmp(cursor, "int", 3) == 0) return TYPE;
-    // Add eating string and numbers
+const int dfa[5][7] = {
+    // TYPE, IDNT, ASSG, NUMB, SEMI, SPCE, ILLG
+    { TYPE, IDNT,   -1,   -1,   -1, 0, -1 }, // State 0 (START)
+    {   -1,   -1, ASSG, NUMB, SEMI, 0, -1 }, // State 1 (TYPE or IDNT)
+    {   -1, IDNT,   -1, NUMB, SEMI, 0, -1 }, // State 2 (IDNT or ASSG)
+    {   -1,   -1,   -1,   -1, SEMI, 0, -1 }, // State 3 (NUMB)
+    {   -1,   -1,   -1,   -1,    0, 0, -1 }, // State 4 (FINAL_STATE)
+};
 
-    char ch = *cursor;
+int getClass(const char **cursor, char *tokenValue) {
+    const char *start = *cursor;
+
+    if (strncmp(*cursor, "int", 3) == 0 && isspace((*cursor)[3])) {
+        *cursor += 3;
+        strcpy(tokenValue, "int");
+        return TYPE;
+    }
+
+    if (isdigit(**cursor)) {
+        while (isdigit(**cursor)) {
+            (*cursor)++;
+        }
+        strncpy(tokenValue, start, *cursor - start);
+        tokenValue[*cursor - start] = '\0';
+        return NUMB;
+    }
+
+    if (isalpha(**cursor)) {
+        while (isalnum(**cursor)) {
+            (*cursor)++;
+        }
+        strncpy(tokenValue, start, *cursor - start);
+        tokenValue[*cursor - start] = '\0';
+        return IDNT;
+    }
+
+    char ch = **cursor;
+    (*cursor)++;
+    tokenValue[0] = ch;
+    tokenValue[1] = '\0';
+
     if (isspace(ch)) return SPCE;
-    if (isalpha(ch)) return IDNT;
-    if (isdigit(ch)) return NUMB;
     if (ch == '=') return ASSG;
     if (ch == ';') return SEMI;
 
@@ -36,9 +65,16 @@ int getClass(const char *cursor) {
 }
 
 int main() {
-    char input[] = "int t = 20;";
+    const char input[] =
+        "x = x;"
+        "int u = 0;"
+        "int i = 10;"
+        "i = 100;"
+    ;
     int state = 0;
     const char *cursor = input;
+
+    char tokenValue[256];
 
     while (*cursor) {
         if (isspace(*cursor)) {
@@ -46,37 +82,32 @@ int main() {
             continue;
         }
 
-        int input_class = getClass(cursor);
+        int input_class = getClass(&cursor, tokenValue);
 
         if (input_class == ILLG) {
             printf("Error: Invalid token '%c'\n", *cursor);
             return 1;
         }
 
-        if (input_class == TYPE) {
-            printf("Keyword: 'int'\n");
-            cursor += 3; // Skip "int"
-            state = dfa[state][TYPE];
-            continue;
-        }
+        printf("Token: %s, Value: '%s'\n", tokenNames[input_class], tokenValue);
 
         int next_state = dfa[state][input_class];
         if (next_state == -1) {
-            printf("Error: Invalid token '%c' at state %d\n", *cursor, state);
+            printf("Error: Invalid token '%s' at state %d\n", tokenValue, state);
             return 1;
         }
 
-        printf("State %d -> '%c' -> State %d\n", state, *cursor, next_state);
-
         state = next_state;
-        cursor++;
+
+        if (input_class == SEMI) {
+            state = 0; // Reset state after a semicolon
+        }
     }
 
-    if (state == 5) {
-        printf("Successfully parsed variable declaration.\n");
-    } else {
-        printf("Error: Incomplete statement at state %d\n", state);
+    if (state != 0) {
+        printf("Error: Incomplete expression at state %d\n", state);
     }
 
     return 0;
 }
+
